@@ -30,11 +30,24 @@ import retrofit2.http.GET
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import android.util.Log
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import org.json.JSONArray
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.sp
 
 import com.example.perfumeapp.ui.theme.PerfumeAppTheme
 import kotlinx.coroutines.CoroutineScope
@@ -51,108 +64,178 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 
+import androidx.navigation.NavController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             PerfumeAppTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    var perfumeList by remember { mutableStateOf(emptyList<Perfume>()) }
-                    var isLoading by remember { mutableStateOf(true) } // Track loading state
-                    LaunchedEffect(key1 = Unit) {
-                        fetchPerfumes { perfumes ->
-                            perfumeList = perfumes
-                            isLoading = false // Set loading state to false when data is loaded
-                        }
-                    }
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        UpdateDataButton {
-                            isLoading = true // Set loading state to true when updating data
-                            fetchPerfumes { perfumes ->
-                                perfumeList = perfumes
-                                isLoading = false // Set loading state to false when data is loaded
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        if (isLoading) {
-                            Loader() // Show loader if data is still loading
-                        } else {
-                            PerfumeCatalog(perfumeList)
-                        }
-                    }
+                val navController = rememberNavController()
+                NavHost(navController, startDestination = "welcome") {
+                    composable("welcome") { WelcomeScreen(navController) }
+                    composable("perfumeCatalog") { PerfumeCatalogScreen() }
                 }
             }
         }
     }
+}
 
-    private fun fetchPerfumes(onPerfumesFetched: (List<Perfume>) -> Unit) {
-        val apiUrl = "https://69e3ce12jh.execute-api.eu-central-1.amazonaws.com/TEST/all-parfumes"
-        // Use Kotlin Coroutine for asynchronous networking
-        // This coroutine will run on the IO dispatcher
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val response = fetchApiResponse(apiUrl)
-                val perfumes = parseJsonResponse(response)
-                // Switch to Main dispatcher to update UI
-                withContext(Dispatchers.Main) {
-                    onPerfumesFetched(perfumes)
-                }
-            } catch (e: Exception) {
-                // Handle errors here
-                e.printStackTrace()
-            }
+@Composable
+fun PerfumeCatalogScreen() {
+    var perfumeList by remember { mutableStateOf(emptyList<Perfume>()) }
+    var isLoading by remember { mutableStateOf(true) } // Track loading state
+    LaunchedEffect(key1 = Unit) {
+        fetchPerfumes { perfumes ->
+            perfumeList = perfumes
+            isLoading = false // Set loading state to false when data is loaded
         }
     }
-
-    private fun fetchApiResponse(apiUrl: String): String {
-        val url = URL(apiUrl)
-        val connection = url.openConnection() as HttpURLConnection
-        connection.requestMethod = "GET"
-
-        val responseCode = connection.responseCode
-        if (responseCode == HttpURLConnection.HTTP_OK) {
-            val reader = BufferedReader(InputStreamReader(connection.inputStream))
-            val response = StringBuilder()
-            var line: String?
-            while (reader.readLine().also { line = it } != null) {
-                response.append(line)
+    Column(modifier = Modifier.fillMaxSize()) {
+        UpdateDataButton {
+            isLoading = true // Set loading state to true when updating data
+            fetchPerfumes { perfumes ->
+                perfumeList = perfumes
+                isLoading = false // Set loading state to false when data is loaded
             }
-            reader.close()
-            connection.disconnect()
-            return response.toString()
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        if (isLoading) {
+            Loader() // Show loader if data is still loading
         } else {
-            // Handle error response
-            throw Exception("Failed to fetch data from API. Response code: $responseCode")
+            PerfumeCatalog(perfumeList)
         }
     }
+}
 
-    private fun parseJsonResponse(jsonResponse: String): List<Perfume> {
-        val perfumeList = mutableListOf<Perfume>()
+fun fetchPerfumes(onPerfumesFetched: (List<Perfume>) -> Unit) {
+    val apiUrl = "https://69e3ce12jh.execute-api.eu-central-1.amazonaws.com/TEST/all-parfumes"
+    // Use Kotlin Coroutine for asynchronous networking
+    // This coroutine will run on the IO dispatcher
+    CoroutineScope(Dispatchers.IO).launch {
         try {
-            val jsonObject = JSONObject(jsonResponse)
-            val body = jsonObject.getString("body")
-            val jsonArray = JSONArray(body)
-            for (i in 0 until jsonArray.length()) {
-                val perfumeJson = jsonArray.getJSONObject(i)
-                val perfume = Perfume(
-                    name = perfumeJson.getString("name"),
-                    brand = perfumeJson.getString("brand"),
-                    gender = perfumeJson.getString("gender"),
-                    scentNotes = perfumeJson.getString("fragrance_notes"),
-                    price = perfumeJson.getDouble("price").toInt(),
-                    volume = perfumeJson.getString("bottle_size"),
-                    releaseYear = perfumeJson.getInt("release_year"),
-                    photoUrl = perfumeJson.getString("image_url")
-                )
-                perfumeList.add(perfume)
+            val response = fetchApiResponse(apiUrl)
+            val perfumes = parseJsonResponse(response)
+            // Switch to Main dispatcher to update UI
+            withContext(Dispatchers.Main) {
+                onPerfumesFetched(perfumes)
             }
-        } catch (e: JSONException) {
-            Log.e("JSON_PARSE_ERROR", "Error parsing JSON response: ${e.message}")
+        } catch (e: Exception) {
+            // Handle errors here
+            e.printStackTrace()
         }
-        return perfumeList
+    }
+}
+
+fun fetchApiResponse(apiUrl: String): String {
+    val url = URL(apiUrl)
+    val connection = url.openConnection() as HttpURLConnection
+    connection.requestMethod = "GET"
+
+    val responseCode = connection.responseCode
+    if (responseCode == HttpURLConnection.HTTP_OK) {
+        val reader = BufferedReader(InputStreamReader(connection.inputStream))
+        val response = StringBuilder()
+        var line: String?
+        while (reader.readLine().also { line = it } != null) {
+            response.append(line)
+        }
+        reader.close()
+        connection.disconnect()
+        return response.toString()
+    } else {
+        // Handle error response
+        throw Exception("Failed to fetch data from API. Response code: $responseCode")
+    }
+}
+
+fun parseJsonResponse(jsonResponse: String): List<Perfume> {
+    val perfumeList = mutableListOf<Perfume>()
+    try {
+        val jsonObject = JSONObject(jsonResponse)
+        val body = jsonObject.getString("body")
+        val jsonArray = JSONArray(body)
+        for (i in 0 until jsonArray.length()) {
+            val perfumeJson = jsonArray.getJSONObject(i)
+            val perfume = Perfume(
+                name = perfumeJson.getString("name"),
+                brand = perfumeJson.getString("brand"),
+                gender = perfumeJson.getString("gender"),
+                scentNotes = perfumeJson.getString("fragrance_notes"),
+                price = perfumeJson.getDouble("price").toInt(),
+                volume = perfumeJson.getString("bottle_size"),
+                releaseYear = perfumeJson.getInt("release_year"),
+                photoUrl = perfumeJson.getString("image_url")
+            )
+            perfumeList.add(perfume)
+        }
+    } catch (e: JSONException) {
+        Log.e("JSON_PARSE_ERROR", "Error parsing JSON response: ${e.message}")
+    }
+    return perfumeList
+}
+
+@Composable
+fun WelcomeScreen(navController: NavController) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.Top,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.perfumes_welcome),
+                contentDescription = "Perfume Bottle",
+                modifier = Modifier
+                    .size(400.dp)
+            )
+            Text(
+                text = "Welcome to Perfume App!",
+                style = TextStyle(
+                    color = Color.White,
+                    fontSize = 25.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.W800,
+                    fontStyle = FontStyle.Italic,
+                )
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+            Button(
+                onClick = { navController.navigate("perfumeCatalog") },
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(vertical = 16.dp, horizontal = 32.dp), // Set button padding
+                shape = RoundedCornerShape(8.dp) // Set button shape
+            ) {
+                Text("Explore Perfumes", color = Color.White, fontSize = 20.sp)
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = "For assistance, call: +1 123-456-7890",
+                style = TextStyle(
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontStyle = FontStyle.Italic,
+                ),
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+            Text(
+                text = "Email: info@perfumeapp.com",
+                style = TextStyle(
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontStyle = FontStyle.Italic,
+                ),
+                modifier = Modifier.padding(bottom = 32.dp)
+            )
+        }
     }
 }
 
