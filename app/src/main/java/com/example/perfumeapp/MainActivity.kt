@@ -1,73 +1,66 @@
 package com.example.perfumeapp
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import coil.compose.rememberImagePainter
-
-import retrofit2.Call
-import retrofit2.http.GET
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
-import android.util.Log
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import org.json.JSONArray
-import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
+import androidx.navigation.NavController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import coil.compose.rememberImagePainter
 import com.example.perfumeapp.ui.theme.PerfumeAppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
-import retrofit2.Callback
-import retrofit2.Response
 import java.io.BufferedReader
-import java.io.IOException
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import androidx.fragment.app.Fragment
 
-import androidx.navigation.NavController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -253,7 +246,9 @@ fun Loader() {
 fun UpdateDataButton(onClick: () -> Unit) {
     Button(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
         content = { Text("Update Data") }
     )
 }
@@ -280,6 +275,9 @@ fun PerfumeCatalog(perfumes: List<Perfume>) {
 
 @Composable
 fun PerfumeItem(perfume: Perfume) {
+    var buyDialogOpen by remember { mutableStateOf(false) }
+    var detailsDialogOpen by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier
             .padding(16.dp)
@@ -289,6 +287,13 @@ fun PerfumeItem(perfume: Perfume) {
             modifier = Modifier
                 .padding(16.dp)
         ) {
+            // Details Button
+            Button(
+                onClick = { detailsDialogOpen = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Details")
+            }
             Image(
                 painter = rememberImagePainter(perfume.photoUrl),
                 contentDescription = null,
@@ -298,13 +303,94 @@ fun PerfumeItem(perfume: Perfume) {
             )
 
             Text(text = "Name: ${perfume.name}")
-            Text(text = "Brand: ${perfume.brand}")
-            Text(text = "Gender: ${perfume.gender}")
-            Text(text = "Scent Notes: ${perfume.scentNotes}")
-            Text(text = "Price: ${perfume.price}")
-            Text(text = "Volume: ${perfume.volume}")
-            Text(text = "Release Year: ${perfume.releaseYear}")
+//            Text(text = "Brand: ${perfume.brand}")
+//            Text(text = "Gender: ${perfume.gender}")
+//            Text(text = "Scent Notes: ${perfume.scentNotes}")
+//            Text(text = "Price: ${perfume.price}")
+//            Text(text = "Volume: ${perfume.volume}")
+//            Text(text = "Release Year: ${perfume.releaseYear}")
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Buy Button
+            Button(
+                onClick = { buyDialogOpen = true },
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text("Buy")
+            }
         }
+    }
+
+    // Dialog for making a call
+    if (detailsDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { detailsDialogOpen = false },
+            title = {
+                Text("${perfume.name} Details")
+            },
+            text = {
+                Column {
+                    Text(text = "Name: ${perfume.name}")
+                    Text(text = "Brand: ${perfume.brand}")
+                    Text(text = "Gender: ${perfume.gender}")
+                    Text(text = "Scent Notes: ${perfume.scentNotes}")
+                    Text(text = "Volume: ${perfume.volume}")
+                    Text(text = "Release Year: ${perfume.releaseYear}")
+                    Text(text = "Price: ${perfume.price}")
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+//                        detailsDialogOpen = false
+                        buyDialogOpen = true
+                    }
+                ) {
+                    Text("Buy")
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = { detailsDialogOpen = false }
+                ) {
+                    Text("Go Back")
+                }
+            }
+        )
+    }
+
+    // Dialog for making a call
+    if (buyDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { buyDialogOpen = false },
+            title = {
+                Text("Call to Buy")
+            },
+            text = {
+                Column {
+                    Text("Price: ${perfume.price}")
+                    Text("To purchase ${perfume.name}, call:")
+                    Text("+1 123-456-7890")
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+
+                        buyDialogOpen = false
+                    }
+                ) {
+                    Text("Call")
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = { buyDialogOpen = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
