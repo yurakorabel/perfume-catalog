@@ -1,6 +1,9 @@
 package com.example.perfumeapp
 
+import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -11,6 +14,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +25,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -34,7 +39,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -60,6 +67,8 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import androidx.fragment.app.Fragment
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 
 
 class MainActivity : ComponentActivity() {
@@ -70,7 +79,13 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 NavHost(navController, startDestination = "welcome") {
                     composable("welcome") { WelcomeScreen(navController) }
-                    composable("perfumeCatalog") { PerfumeCatalogScreen() }
+                    composable(
+                        route = "perfumeCatalog/{gender}",
+                        arguments = listOf(navArgument("gender") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val gender = backStackEntry.arguments?.getString("gender")
+                        PerfumeCatalogScreen(gender)
+                    }
                 }
             }
         }
@@ -78,11 +93,13 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun PerfumeCatalogScreen() {
+fun PerfumeCatalogScreen(gender: String?) {
+    require(gender != null) { "Gender cannot be null" }
+
     var perfumeList by remember { mutableStateOf(emptyList<Perfume>()) }
     var isLoading by remember { mutableStateOf(true) } // Track loading state
     LaunchedEffect(key1 = Unit) {
-        fetchPerfumes { perfumes ->
+        fetchPerfumes(gender) { perfumes ->
             perfumeList = perfumes
             isLoading = false // Set loading state to false when data is loaded
         }
@@ -90,7 +107,7 @@ fun PerfumeCatalogScreen() {
     Column(modifier = Modifier.fillMaxSize()) {
         UpdateDataButton {
             isLoading = true // Set loading state to true when updating data
-            fetchPerfumes { perfumes ->
+            fetchPerfumes(gender) { perfumes ->
                 perfumeList = perfumes
                 isLoading = false // Set loading state to false when data is loaded
             }
@@ -104,8 +121,8 @@ fun PerfumeCatalogScreen() {
     }
 }
 
-fun fetchPerfumes(onPerfumesFetched: (List<Perfume>) -> Unit) {
-    val apiUrl = "https://69e3ce12jh.execute-api.eu-central-1.amazonaws.com/TEST/all-parfumes"
+fun fetchPerfumes(gender: String, onPerfumesFetched: (List<Perfume>) -> Unit) {
+    val apiUrl = "https://69e3ce12jh.execute-api.eu-central-1.amazonaws.com/TEST/all-parfumes/$gender/"
     // Use Kotlin Coroutine for asynchronous networking
     // This coroutine will run on the IO dispatcher
     CoroutineScope(Dispatchers.IO).launch {
@@ -156,6 +173,7 @@ fun parseJsonResponse(jsonResponse: String): List<Perfume> {
             val perfume = Perfume(
                 name = perfumeJson.getString("name"),
                 brand = perfumeJson.getString("brand"),
+                category = perfumeJson.getString("category_name"),
                 gender = perfumeJson.getString("gender"),
                 scentNotes = perfumeJson.getString("fragrance_notes"),
                 price = perfumeJson.getDouble("price").toInt(),
@@ -173,6 +191,10 @@ fun parseJsonResponse(jsonResponse: String): List<Perfume> {
 
 @Composable
 fun WelcomeScreen(navController: NavController) {
+    var selectedGender by remember { mutableStateOf<String?>(null) }
+    var isNetworkError by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -184,6 +206,14 @@ fun WelcomeScreen(navController: NavController) {
             verticalArrangement = Arrangement.Top,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            if (!isNetworkAvailable(context)) {
+                Text(
+                    text = "No internet connection",
+                    style = TextStyle(color = Color.Red),
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                // You can customize the warning message as needed
+            }
             Image(
                 painter = painterResource(id = R.drawable.perfumes_welcome),
                 contentDescription = "Perfume Bottle",
@@ -202,12 +232,35 @@ fun WelcomeScreen(navController: NavController) {
             )
             Spacer(modifier = Modifier.height(32.dp))
             Button(
-                onClick = { navController.navigate("perfumeCatalog") },
+                onClick = {
+                    if (isNetworkAvailable(context)) {
+                        selectedGender = "male"
+                        navController.navigate("perfumeCatalog/$selectedGender")
+                    } else {
+                        isNetworkError = true
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(vertical = 16.dp, horizontal = 32.dp), // Set button padding
                 shape = RoundedCornerShape(8.dp) // Set button shape
             ) {
-                Text("Explore Perfumes", color = Color.White, fontSize = 20.sp)
+                Text("Explore Male Perfumes", color = Color.White, fontSize = 20.sp)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = {
+                    if (isNetworkAvailable(context)) {
+                        selectedGender = "female"
+                        navController.navigate("perfumeCatalog/$selectedGender")
+                    } else {
+                        isNetworkError = true
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(vertical = 16.dp, horizontal = 32.dp), // Set button padding
+                shape = RoundedCornerShape(8.dp) // Set button shape
+            ) {
+                Text("Explore Female Perfumes", color = Color.White, fontSize = 20.sp)
             }
             Spacer(modifier = Modifier.weight(1f))
             Text(
@@ -256,6 +309,7 @@ fun UpdateDataButton(onClick: () -> Unit) {
 data class Perfume(
     val name: String,
     val brand: String,
+    val category: String,
     val gender: String,
     val scentNotes: String,
     val price: Int,
@@ -280,44 +334,76 @@ fun PerfumeItem(perfume: Perfume) {
 
     Card(
         modifier = Modifier
-            .padding(16.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
             .fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier
-                .padding(16.dp)
+            modifier = Modifier.padding(16.dp)
         ) {
-            // Details Button
-            Button(
-                onClick = { detailsDialogOpen = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Details")
-            }
+            // Perfume Image
             Image(
                 painter = rememberImagePainter(perfume.photoUrl),
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(200.dp)
+                    .clip(shape = RoundedCornerShape(8.dp))
             )
-
-            Text(text = "Name: ${perfume.name}")
-//            Text(text = "Brand: ${perfume.brand}")
-//            Text(text = "Gender: ${perfume.gender}")
-//            Text(text = "Scent Notes: ${perfume.scentNotes}")
-//            Text(text = "Price: ${perfume.price}")
-//            Text(text = "Volume: ${perfume.volume}")
-//            Text(text = "Release Year: ${perfume.releaseYear}")
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Buy Button
-            Button(
-                onClick = { buyDialogOpen = true },
-                modifier = Modifier.align(Alignment.End)
+            // Perfume Details
+            Text(
+                text = perfume.name,
+                style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                text = perfume.brand,
+                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Normal),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                text = "Category: ${perfume.category}",
+                style = TextStyle(fontSize = 14.sp, fontStyle = FontStyle.Italic),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Actions Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
             ) {
-                Text("Buy")
+                // Details Button
+                Button(
+                    onClick = { detailsDialogOpen = true },
+                    modifier = Modifier.padding(end = 8.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        contentColor = Color.Blue // Text color
+                    )
+                ) {
+                    Text(
+                        "Details",
+                        style = TextStyle(fontWeight = FontWeight.Bold)
+                    )
+                }
+
+                // Buy Button
+                Button(
+                    onClick = { buyDialogOpen = true },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        contentColor = Color.Blue // Text color
+                    )
+                ) {
+                    Text(
+                        "Buy",
+                        style = TextStyle(fontWeight = FontWeight.Bold)
+                    )
+                }
             }
         }
     }
@@ -327,34 +413,41 @@ fun PerfumeItem(perfume: Perfume) {
         AlertDialog(
             onDismissRequest = { detailsDialogOpen = false },
             title = {
-                Text("${perfume.name} Details")
+                Text(
+                    text = "${perfume.name} Details",
+                    style = TextStyle(
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                )
             },
             text = {
                 Column {
-                    Text(text = "Name: ${perfume.name}")
-                    Text(text = "Brand: ${perfume.brand}")
-                    Text(text = "Gender: ${perfume.gender}")
-                    Text(text = "Scent Notes: ${perfume.scentNotes}")
-                    Text(text = "Volume: ${perfume.volume}")
-                    Text(text = "Release Year: ${perfume.releaseYear}")
-                    Text(text = "Price: ${perfume.price}")
+                    DetailItem("Name", perfume.name.toString())
+                    DetailItem("Brand", perfume.brand)
+                    DetailItem("Category", perfume.category)
+                    DetailItem("Gender", perfume.gender)
+                    DetailItem("Scent Notes", perfume.scentNotes)
+                    DetailItem("Volume", perfume.volume)
+                    DetailItem("Release Year", perfume.releaseYear.toString())
+                    DetailItem("Price", "${perfume.price} $")
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-//                        detailsDialogOpen = false
                         buyDialogOpen = true
                     }
                 ) {
-                    Text("Buy")
+                    Text("Buy", color = Color.White)
                 }
             },
             dismissButton = {
                 Button(
                     onClick = { detailsDialogOpen = false }
                 ) {
-                    Text("Go Back")
+                    Text("Go Back", color = Color.White)
                 }
             }
         )
@@ -377,20 +470,48 @@ fun PerfumeItem(perfume: Perfume) {
             confirmButton = {
                 Button(
                     onClick = {
-
                         buyDialogOpen = false
                     }
                 ) {
-                    Text("Call")
+                    Text("Call", color = Color.Black)
                 }
             },
             dismissButton = {
                 Button(
                     onClick = { buyDialogOpen = false }
                 ) {
-                    Text("Cancel")
+                    Text("Cancel", color = Color.Black)
                 }
             }
         )
     }
+}
+
+@Composable
+fun DetailItem(label: String, value: String) {
+    Row(
+        modifier = Modifier.padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "$label: ",
+            style = TextStyle(
+                fontWeight = FontWeight.Bold,
+                color = Color.Black
+            )
+        )
+        Text(
+            text = value,
+            style = TextStyle(
+                color = Color.Black
+            )
+        )
+    }
+}
+
+fun isNetworkAvailable(context: Context): Boolean {
+    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val network = connectivityManager.activeNetwork ?: return false
+    val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
 }
