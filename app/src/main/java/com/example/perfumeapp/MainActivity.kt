@@ -123,8 +123,7 @@ fun PerfumeCatalogScreen(gender: String?) {
 
 fun fetchPerfumes(gender: String, onPerfumesFetched: (List<Perfume>) -> Unit) {
     val apiUrl = "https://69e3ce12jh.execute-api.eu-central-1.amazonaws.com/TEST/all-parfumes/$gender/"
-    // Use Kotlin Coroutine for asynchronous networking
-    // This coroutine will run on the IO dispatcher
+
     CoroutineScope(Dispatchers.IO).launch {
         try {
             val response = fetchApiResponse(apiUrl)
